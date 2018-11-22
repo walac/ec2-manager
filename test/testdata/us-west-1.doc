@@ -1,0 +1,17 @@
+{
+  "privateIp" : "172.31.10.236",
+  "devpayProductCodes" : null,
+  "marketplaceProductCodes" : null,
+  "version" : "2017-09-30",
+  "instanceType" : "t2.nano",
+  "billingProducts" : null,
+  "instanceId" : "i-088e255bb7c51c05a",
+  "accountId" : "692406183521",
+  "availabilityZone" : "us-west-1b",
+  "kernelId" : null,
+  "ramdiskId" : null,
+  "architecture" : "x86_64",
+  "imageId" : "ami-063aa838bd7631e0b",
+  "pendingTime" : "2018-11-21T19:01:31Z",
+  "region" : "us-west-1"
+}

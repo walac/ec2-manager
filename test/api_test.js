@@ -1,67 +1,13 @@
 const testing = require('taskcluster-lib-testing');
 const taskcluster = require('taskcluster-client');
 const assume = require('assume');
+const assert = require('assert');
 const main = require('../lib/main');
 const {builder} = require('../lib/api');
 const sinon = require('sinon');
 const uuid = require('uuid');
-
-const pkcs7TestData = {
-  signedData: `
-MIAGCSqGSIb3DQEHAqCAMIACAQExCzAJBgUrDgMCGgUAMIAGCSqGSIb3DQEHAaCAJIAEggHVewog
-ICJkZXZwYXlQcm9kdWN0Q29kZXMiIDogbnVsbCwKICAibWFya2V0cGxhY2VQcm9kdWN0Q29kZXMi
-IDogbnVsbCwKICAiYXZhaWxhYmlsaXR5Wm9uZSIgOiAidXMtZWFzdC0xZCIsCiAgInZlcnNpb24i
-IDogIjIwMTctMDktMzAiLAogICJpbnN0YW5jZUlkIiA6ICJpLTAzYWUxNGMzNDZiYTY0M2ExIiwK
-ICAiYmlsbGluZ1Byb2R1Y3RzIiA6IG51bGwsCiAgImluc3RhbmNlVHlwZSIgOiAibTQueGxhcmdl
-IiwKICAiYXJjaGl0ZWN0dXJlIiA6ICJ4ODZfNjQiLAogICJrZXJuZWxJZCIgOiBudWxsLAogICJy
-YW1kaXNrSWQiIDogbnVsbCwKICAiYWNjb3VudElkIiA6ICI2OTI0MDYxODM1MjEiLAogICJpbWFn
-ZUlkIiA6ICJhbWktNDI3YjRlMzgiLAogICJwZW5kaW5nVGltZSIgOiAiMjAxOC0wMS0yMlQxMjoy
-OTo1NFoiLAogICJwcml2YXRlSXAiIDogIjE3Mi4zMS4yMy4yMjUiLAogICJyZWdpb24iIDogInVz
-LWVhc3QtMSIKfQAAAAAAADGCARgwggEUAgEBMGkwXDELMAkGA1UEBhMCVVMxGTAXBgNVBAgTEFdh
-c2hpbmd0b24gU3RhdGUxEDAOBgNVBAcTB1NlYXR0bGUxIDAeBgNVBAoTF0FtYXpvbiBXZWIgU2Vy
-dmljZXMgTExDAgkAlrpI2eVeGmcwCQYFKw4DAhoFAKBdMBgGCSqGSIb3DQEJAzELBgkqhkiG9w0B
-BwEwHAYJKoZIhvcNAQkFMQ8XDTE4MDEyMjEyMzAwMlowIwYJKoZIhvcNAQkEMRYEFK1hHB7W5la2
-AWAHCWVgYPYyJzAxMAkGByqGSM44BAMELzAtAhUAsQXD04cP48o7HVHWJtVRHZEUkBICFHcuPVAu
-7KVSbiWnFnDL0v87RSxhAAAAAAAA`,
-  doc: Buffer.from(
-    // eslint-disable-next-line indent
-`{
-  "devpayProductCodes" : null,
-  "marketplaceProductCodes" : null,
-  "availabilityZone" : "us-east-1d",
-  "version" : "2017-09-30",
-  "instanceId" : "i-03ae14c346ba643a1",
-  "billingProducts" : null,
-  "instanceType" : "m4.xlarge",
-  "architecture" : "x86_64",
-  "kernelId" : null,
-  "ramdiskId" : null,
-  "accountId" : "692406183521",
-  "imageId" : "ami-427b4e38",
-  "pendingTime" : "2018-01-22T12:29:54Z",
-  "privateIp" : "172.31.23.225",
-  "region" : "us-east-1"
-}`).toString('base64'),
-  invalidDoc: Buffer.from(
-    // eslint-disable-next-line indent
-`{
-  "devpayProductCodes" : null,
-  "marketplaceProductCodes" : null,
-  "availabilityZone" : "us-east-1d",
-  "version" : "2017-09-30",
-  "instanceId" : "i-13ae14c346ba643a1",
-  "billingProducts" : null,
-  "instanceType" : "m4.xlarge",
-  "architecture" : "x86_64",
-  "kernelId" : null,
-  "ramdiskId" : null,
-  "accountId" : "692406183521",
-  "imageId" : "ami-427b4e38",
-  "pendingTime" : "2018-01-22T12:29:54Z",
-  "privateIp" : "172.31.23.225",
-  "region" : "us-east-1"
-}`).toString('base64'),
-};
+const fs = require('fs');
+const path = require('path');
 
 describe('Api', () => {
   let state;
@@ -634,9 +580,25 @@ describe('Api', () => {
   });
 
   describe('credentials', () => {
+    const regions = [
+      'us-east-1',
+      'us-east-2',
+      'us-west-1',
+      'us-west-2',
+      'eu-central-1',
+    ];
+
+    const signatureTestData = regions.map(region => {
+      const f = path.join(__dirname, 'testdata', region);
+      return {
+        doc: fs.readFileSync(f + '.doc').toString('base64'),
+        signature: fs.readFileSync(f + '.sig').toString(),
+      };
+    });
+
     async function testErrorReturn(fn, doc) {
       try {
-        await fn.apply(client, [{signature: pkcs7TestData.signedData, document: doc}]);
+        await fn.apply(client, [{signature: doc.signature, document: doc.doc}]);
       } catch (err) {
         return err.code;
       }
@@ -644,19 +606,15 @@ describe('Api', () => {
       throw new Error(`Function ${fn} should have failed`);
     }
 
-    let createTemporaryCredentials = taskcluster.createTemporaryCredentials;
-
     let expectedCredentials = {
       clientId: 'myClientId',
       accessToken: 'myAccessToken',
       certificate: 'myCertificate',
     };
 
-    let doc = JSON.parse(Buffer.from(pkcs7TestData.doc, 'base64').toString());
-
     before(() => {
-      taskcluster.createTemporaryCredentials = sandbox.stub();
-      taskcluster.createTemporaryCredentials.returns(expectedCredentials);
+      let stub = sandbox.stub(taskcluster, 'createTemporaryCredentials');
+      stub.returns(expectedCredentials);
     });
 
     after(() => {
@@ -664,16 +622,21 @@ describe('Api', () => {
     });
 
     it('invalid document', async () => {
-      const code = await testErrorReturn(client.getCredentials, pkcs7TestData.invalidDoc);
+      const code = await testErrorReturn(client.getCredentials, {
+        doc: signatureTestData[0].doc,
+        signature: signatureTestData[1].signature,
+      });
       return assume(code).equals('AuthorizationFailed');
     });
 
     it('instance not in the database', async () => {
-      const code = await testErrorReturn(client.getCredentials, pkcs7TestData.doc);
+      const code = await testErrorReturn(client.getCredentials, signatureTestData[0]);
       return assume(code).equals('AuthorizationFailed');
     });
 
     it('instance is not running', async () => {
+      const doc = JSON.parse(Buffer.from(signatureTestData[0].doc, 'base64').toString());
+
       await state.insertInstance({
         id: doc.instanceId,
         workerType,
@@ -686,28 +649,40 @@ describe('Api', () => {
         lastEvent: new Date(),
       });
 
-      await testErrorReturn(client.getCredentials, pkcs7TestData.invalidDoc);
+      const code = await testErrorReturn(client.getCredentials, signatureTestData[0]);
+      assume(code).equals('AuthorizationFailed');
     });
 
     it('claimed successfully', async () => {
-      await state.insertInstance({
-        id: doc.instanceId,
-        workerType,
-        region: doc.region,
-        instanceType,
-        state: 'running',
-        az,
-        imageId,
-        launched,
-        lastEvent: new Date(),
-      });
+      for (let testData of signatureTestData) {
+        const doc = JSON.parse(Buffer.from(testData.doc, 'base64').toString());
 
-      let credentials = await client.getCredentials({
-        document: pkcs7TestData.doc,
-        signature: pkcs7TestData.signedData,
-      });
-      assume(credentials).eql(expectedCredentials);
-      testErrorReturn(client.claimCredentials, pkcs7TestData.signedData);
+        await state.insertInstance({
+          id: doc.instanceId,
+          workerType,
+          region: doc.region,
+          instanceType,
+          state: 'running',
+          az,
+          imageId,
+          launched,
+          lastEvent: new Date(),
+        });
+
+        try {
+          let credentials = await client.getCredentials({
+            document: testData.doc,
+            signature: testData.signature,
+          });
+        } catch (err) {
+          assert.fail(`getCredentials for region ${doc.region} failed: ${err}`);
+        }
+        assume(credentials).eql(expectedCredentials);
+
+        // a second try should fail
+        const code = await testErrorReturn(client.getCredentials, testData);
+        assume(code).equals('AuthorizationFailed');
+      }
     });
   });
 
